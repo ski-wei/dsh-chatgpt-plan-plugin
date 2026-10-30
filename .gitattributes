@@ -1,0 +1,10 @@
+# Keep source and JSON stable across Windows/WSL checkouts so SHA256SUMS verifies.
+* text=auto eol=lf
+*.svg text eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.tgz binary
