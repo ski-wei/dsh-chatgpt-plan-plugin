@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ChatGPT Plan provider">
+  <defs>
+    <linearGradient id="g1" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#69B9FF"/>
+      <stop offset="1" stop-color="#3254E8"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="18" y1="22" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#45E7A4"/>
+      <stop offset="1" stop-color="#0B9FB0"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#111827"/>
+  <path d="M18 17h28a7 7 0 0 1 7 7v14a7 7 0 0 1-7 7H34l-9 7v-7h-7a7 7 0 0 1-7-7V24a7 7 0 0 1 7-7Z" fill="url(#g1)" opacity="0.95"/>
+  <path d="M27 27h10M27 34h17" stroke="#F8FAFC" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="46" cy="44" r="9" fill="url(#g2)" stroke="#111827" stroke-width="3"/>
+  <path d="M42.5 44.2l2.4 2.4 4.6-5" fill="none" stroke="#052E2B" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

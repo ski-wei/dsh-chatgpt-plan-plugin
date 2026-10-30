@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "ChatGPT Plan provider",
+    "description": "Sign in with ChatGPT and use an eligible ChatGPT plan as a native DSH model provider. DSH keeps the agent loop, tools, sessions, and memory."
+  }
+}

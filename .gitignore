@@ -1,0 +1,18 @@
+# Local peer links used only to run tests against the installed DSH
+node_modules/
+
+# Local package-manager / inspection caches
+.npm-cache/
+.inspect-codex/
+
+# Project-local acceptance scratch space (not part of the plugin)
+.acceptance-tmp/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Local logs (never commit credentials, tokens, or session logs)
+*.log

@@ -1,0 +1,59 @@
+{
+  "kind": "simulated-fixtures",
+  "note": "no real quota/permission/network failure was induced; these are mock SSE/HTTP responses through the real adapter code",
+  "cases": {
+    "streamClosed": {
+      "count": 1,
+      "reason": {
+        "kind": "error",
+        "failure": {
+          "message": "The ChatGPT-plan stream ended before a terminal response event",
+          "code": "STREAM_CLOSED"
+        }
+      }
+    },
+    "quota": {
+      "count": 1,
+      "reason": {
+        "kind": "error",
+        "failure": {
+          "message": "The ChatGPT plan usage limit was reached (subscription_sharing_usage_limit_exceeded)",
+          "code": "QUOTA",
+          "status": 429
+        }
+      }
+    },
+    "notEligible": {
+      "count": 1,
+      "reason": {
+        "kind": "error",
+        "failure": {
+          "message": "The ChatGPT plan is not eligible (subscription_sharing_user_not_eligible)",
+          "code": "QUOTA",
+          "status": 403
+        }
+      }
+    },
+    "auth": {
+      "count": 1,
+      "reason": {
+        "kind": "error",
+        "failure": {
+          "message": "The ChatGPT account is no longer valid (subscription_sharing_invalid_user)",
+          "code": "AUTH",
+          "status": 401
+        }
+      }
+    },
+    "interrupted": {
+      "count": 1,
+      "reason": {
+        "kind": "error",
+        "failure": {
+          "message": "The ChatGPT-plan stream ended before a terminal response event",
+          "code": "STREAM_CLOSED"
+        }
+      }
+    }
+  }
+}
