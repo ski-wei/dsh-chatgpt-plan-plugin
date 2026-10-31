@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "action": "Sign in again on the already-signed-in account via Models footer",
+  "authorizeUrlShape": {
+    "method": "reauth",
+    "host": "auth.openai.com",
+    "path": "/api/accounts/authorize",
+    "clientIdIsDynamic": false,
+    "agentNameHintPresent": false,
+    "extAgentHostIdPresent": false,
+    "idTokenHintPresent": true,
+    "loginHintPresent": true,
+    "pkce": "S256",
+    "redirectOk": true,
+    "scopeHasPlan": true,
+    "urlDiscarded": true
+  },
+  "before": {
+    "accountId": "acct-39f71f01da6bc3125abdc75b",
+    "grantRecord": "openai-chatgpt-plan/reconnect-17aa42ca0e57e990",
+    "generation": 1,
+    "addedAt": "2026-10-31T21:30:09+08:00",
+    "clientIdHash": "3ead95b1387325c9"
+  },
+  "after": {
+    "accountId": "acct-39f71f01da6bc3125abdc75b",
+    "grantRecord": "openai-chatgpt-plan/reconnect-17aa42ca0e57e990",
+    "generation": 2,
+    "addedAt": "2026-10-31T21:30:09+08:00",
+    "lastRefreshAt": "2026-10-31T21:41:27+08:00",
+    "expiresAt": "2026-10-31T22:41:27+08:00",
+    "clientIdHash": "3ead95b1387325c9",
+    "planEnabled": true,
+    "reauthRequired": false,
+    "scopes": [
+      "chatgpt.tokens.use.direct",
+      "email",
+      "offline_access",
+      "openid",
+      "profile",
+      "resource.invoke"
+    ]
+  },
+  "statusAfter": {
+    "signedIn": true,
+    "providerRegistered": true,
+    "modelCount": 8,
+    "pendingSignIns": 0,
+    "loginPending": false,
+    "reconnectable": []
+  },
+  "stateAfter": {
+    "accounts": [
+      "acct-39f71f01da6bc3125abdc75b"
+    ],
+    "tombstones": [],
+    "activeAccountId": "acct-39f71f01da6bc3125abdc75b"
+  },
+  "checks": {
+    "sameAccountId": true,
+    "sameGrantRecord": true,
+    "generationIncremented": true,
+    "addedAtPreserved": true,
+    "lastRefreshAtUpdated": true,
+    "clientIdUnchanged": true,
+    "idTokenVerified": true
+  },
+  "notCaptured": [
+    "token values",
+    "authorize URL contents beyond the parsed booleans"
+  ],
+  "noSecrets": true
+}

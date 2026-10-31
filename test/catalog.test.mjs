@@ -84,7 +84,7 @@ test('catalog uses the account token, caches for the TTL, and maps provider iden
 
 test('a 401 refreshes once and retries; a second 401 marks re-auth and returns no stale catalog', async () => {
   const { catalog, account, accounts, oauth, fetch } = setup({ models: [{ slug: 'gpt-5.4' }], fetchStatus: 401 })
-  await assert.rejects(() => catalog.getModels(account), (error) => error.code === 'AUTH')
+  await assert.rejects(() => catalog.getModels(account), (error) => error.code === 'AUTH_REJECTED')
   assert.equal(oauth.calls.refresh, 1)
   assert.equal(fetch.calls.length, 2)
   assert.equal((await accounts.readAccountById(account.id)).reauthRequired, true)

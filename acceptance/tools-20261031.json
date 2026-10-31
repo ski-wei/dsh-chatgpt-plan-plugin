@@ -1,0 +1,121 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "venue": "gui-manual",
+  "session": {
+    "title": "chatgpt测试",
+    "id": "session-2d0050de-dcee-40a6-892f-9b61ff4aa49d"
+  },
+  "provider": "openai-chatgpt-plan",
+  "model": "gpt-6.1-sol",
+  "turns": [
+    {
+      "turn": 2,
+      "user": "只回复OK，不要调用任何工具",
+      "assistant": "OK",
+      "finish": "stop",
+      "usage": {
+        "input": 9887,
+        "output": 5,
+        "total": 9892
+      },
+      "verdict": "PASS"
+    },
+    {
+      "turn": 3,
+      "user": "用 bash 运行 printf tool-ok 并原样回复",
+      "toolCall": {
+        "seq": 45,
+        "id": "call_ua1urnM6NtFOqPX3FZNzVgRE",
+        "name": "bash",
+        "arguments": "{\"command\":\"printf tool-ok\"}"
+      },
+      "toolResult": {
+        "seq": 47,
+        "callId": "call_ua1urnM6NtFOqPX3FZNzVgRE",
+        "isError": false,
+        "text": "tool-ok\n[Command finished with exit code 0]"
+      },
+      "steps": [
+        {
+          "assistant": "tool-call",
+          "finish": "tool-calls",
+          "usage": {
+            "input": 11138,
+            "output": 20,
+            "total": 11158
+          }
+        },
+        {
+          "assistant": "tool-ok",
+          "finish": "stop"
+        }
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "turn": 4,
+      "user": "上一条命令输出的字符串是什么？只回答它。",
+      "assistant": "tool-ok",
+      "finish": "stop",
+      "verdict": "PASS"
+    },
+    {
+      "turn": 5,
+      "user": "先用 bash 运行 pwd，再用 read 读取 README.md 的前 3 行",
+      "toolCalls": [
+        {
+          "seq": 68,
+          "id": "call_qBbqzv9JiVfD4gyoRHlQr0x6",
+          "name": "bash",
+          "arguments": "{\"command\":\"pwd\"}",
+          "resultSeq": 70,
+          "isError": false,
+          "result": "/home/qwei/dsh-chatgpt-plan-plugin"
+        },
+        {
+          "seq": 73,
+          "id": "call_UeD2qeC2Nt7A7VPVO16qZDvG",
+          "name": "bash",
+          "arguments": "{\"command\":\"for i in 1 2 3; do IFS= read -r line || break; printf '%s\\\\n' \\\"$line\\\"; done < README.md\"}",
+          "resultSeq": 75,
+          "isError": false,
+          "result": "# @local/dsh-chatgpt-plan ..."
+        }
+      ],
+      "final": {
+        "seq": 78,
+        "finish": "stop",
+        "usage": {
+          "input": 13570,
+          "output": 53,
+          "total": 13623
+        }
+      },
+      "verdict": "PASS_WITH_DEVIATION",
+      "deviation": "模型用了第二个 bash 而不是 read 读取 README；两个 call_id 独立且都正确回填，最终答案正确。"
+    }
+  ],
+  "checks": {
+    "singleFinishPerStep": true,
+    "callIdRoundTrip": true,
+    "toolResultIsErrorFalse": true,
+    "multiTurnHistory": true,
+    "usageRecorded": true,
+    "requestBodyPersisted": false,
+    "toolResultRoundTripBasis": "live tool result + correct final answer + offline serializer test"
+  },
+  "observedIssues": [
+    "seq 73 的 assistant/message 含一个空 reasoning 块（text=\"\"）；不影响结果，但 UI 可能显示空的思考块。",
+    "模型把'用 read'改成了 bash 循环读取；属模型行为，不是序列化错误。"
+  ],
+  "notVerified": [
+    "sign-out then Reconnect live",
+    "real token refresh",
+    "live re-authorization",
+    "quota/permission UI"
+  ],
+  "noSecrets": true
+}

@@ -13,6 +13,7 @@ import { ModelCatalog } from './lib/catalog.js'
 import { ChatGptPlanAdapter } from './lib/adapter.js'
 import { OAuthCoordinator } from './lib/coordinator.js'
 import { createWebRoutes } from './lib/web-routes.js'
+import { RequestErrorStore } from './lib/request-errors.js'
 
 export const name = 'openai-chatgpt-plan'
 export const inject = ['llm', 'credentials']
@@ -47,11 +48,13 @@ export function apply(ctx, rawConfig) {
     logger: ctx.logger,
     userAgent: attributionHeaders()['user-agent'],
   })
+  const requestErrors = new RequestErrorStore()
   const adapter = new ChatGptPlanAdapter({
     accounts,
     catalog,
     config,
     logger: ctx.logger,
+    errors: requestErrors,
   })
 
   let registration
@@ -106,6 +109,7 @@ export function apply(ctx, rawConfig) {
     logger: ctx.logger,
     getAuthorization: () => ctx.get('authorization'),
     onAuthorized: async (account) => {
+      requestErrors.clear()
       catalog.invalidate(account.id)
       await syncRegistration()
     },
@@ -129,19 +133,24 @@ export function apply(ctx, rawConfig) {
             code: accountStatus.stateError,
             message: 'Stored ChatGPT-plan account state is unreadable; it was not overwritten.',
           })
+    const pendingSignIns = coordinator.pendingCount()
     return {
       signedIn: accountStatus.signedIn === true,
       activeAccountId: accountStatus.activeAccountId,
       accounts: accountStatus.accounts ?? [],
+      reconnectable: accountStatus.reconnectable ?? [],
       providerRegistered: registration !== undefined,
       modelCount,
       callbackAvailable: runtime.callbackAvailable === true && runtime.loginAvailable === true,
-      loginPending: coordinator.pendingCount() > 0,
+      pendingSignIns,
+      loginPending: pendingSignIns > 0,
+      ...(adapter.lastRequestError === undefined ? {} : { lastRequestError: adapter.lastRequestError }),
       ...(lastError === undefined ? {} : { lastError }),
     }
   }
 
   const onAccountsChanged = async () => {
+    requestErrors.clear()
     catalog.invalidate()
     await syncRegistration()
     emitUpdated()

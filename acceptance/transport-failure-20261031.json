@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "session": {
+    "title": "chatgpt测试",
+    "id": "session-2d0050de-dcee-40a6-892f-9b61ff4aa49d",
+    "seq": {
+      "requestHeader": 16,
+      "attempts": [
+        20,
+        23,
+        26
+      ],
+      "turnEnd": 28
+    }
+  },
+  "request": {
+    "provider": "openai-chatgpt-plan",
+    "model": "gpt-6.1-sol",
+    "reasoningEffort": "medium",
+    "toolCount": 40,
+    "approxAttemptSeconds": 5.0
+  },
+  "outcome": {
+    "code": "TRANSPORT",
+    "message": "The ChatGPT-plan transport failed",
+    "finishCount": 3,
+    "retries": 2
+  },
+  "independentReproduction": {
+    "target": "https://api.openai.com/v1/models",
+    "curlViaLocalProxy": {
+      "requests": 10,
+      "http401": 8,
+      "tlsUnexpectedEof": 2,
+      "slowOver2s": 2,
+      "failureTimeSeconds": 3.0
+    },
+    "nodeFetchSameHostPath": {
+      "requests": 10,
+      "http401": 9,
+      "failure": 1,
+      "failureCause": "ECONNRESET",
+      "failureTimeMs": 3021
+    },
+    "hostLog": {
+      "line": "api.deepseek.com model listing timed out after 5000 ms",
+      "meaning": "same host network path also timed out"
+    }
+  },
+  "otherMachine": {
+    "behavior": "same plugin and account work normally",
+    "conclusion": "local network/proxy path differs"
+  },
+  "conclusion": "Intermittent TLS reset between this machine and api.openai.com; not a credential, scope, request-body, or plugin-protocol failure.",
+  "codeChange": {
+    "transportMessage": "includes a safe cause code such as ECONNRESET",
+    "retryPolicy": {
+      "maxRetries": 4,
+      "initialDelayMs": 1000,
+      "maxDelayMs": 15000,
+      "jitterRatio": 0.2,
+      "attempts": 5
+    },
+    "liveRequiresRestart": true
+  },
+  "notVerified": [
+    "successful text completion on this machine",
+    "tool call",
+    "token refresh",
+    "sign-out + reconnect"
+  ],
+  "noSecrets": true
+}

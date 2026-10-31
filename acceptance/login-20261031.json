@@ -1,0 +1,90 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "plugin": "@local/dsh-chatgpt-plan@0.2.0",
+  "liveStatus": {
+    "signedIn": true,
+    "activeAccountId": "acct-39f71f01da6bc3125abdc75b",
+    "accounts": [
+      {
+        "id": "acct-39f71f01da6bc3125abdc75b",
+        "label": "q***@gmail.com",
+        "email": "q***@gmail.com",
+        "planEnabled": true,
+        "reauthRequired": false,
+        "expiresAt": 1793455619391
+      }
+    ],
+    "reconnectable": [],
+    "providerRegistered": true,
+    "modelCount": 8,
+    "callbackAvailable": true,
+    "pendingSignIns": 0,
+    "loginPending": false
+  },
+  "accountNote": "One account signed in on this machine; label/email masked in this file.",
+  "credentialStore": {
+    "stateRecord": "openai-chatgpt-plan/state",
+    "grantRecord": "openai-chatgpt-plan/pending-eea07ed36975e57c",
+    "grantFields": [
+      "accessToken",
+      "addedAt",
+      "clientId",
+      "earliestRefreshAt",
+      "email",
+      "expiresAt",
+      "generation",
+      "id",
+      "idToken",
+      "issuer",
+      "kind",
+      "label",
+      "lastRefreshAt",
+      "planEnabled",
+      "reauthRequired",
+      "recordId",
+      "refreshToken",
+      "scopes",
+      "sid",
+      "subject",
+      "tokenType",
+      "version"
+    ],
+    "tokensExported": false
+  },
+  "pendingProbe": [
+    {
+      "step": "status before",
+      "pendingSignIns": 0,
+      "loginPending": false
+    },
+    {
+      "step": "POST /chatgpt-plan/start {newAccount:true}",
+      "httpStatus": 200,
+      "urlDiscarded": true,
+      "pendingSignIns": 1,
+      "loginPending": true
+    },
+    {
+      "step": "POST /chatgpt-plan/cancel",
+      "pendingSignIns": 0,
+      "loginPending": false,
+      "signedIn": true
+    }
+  ],
+  "observedAt": "2026-10-31T21:09:11+08:00",
+  "notRun": [
+    "real text completion through DSH with a ChatGPT Plan model",
+    "tool call through DSH",
+    "sign-out then Reconnect live reuse",
+    "real token refresh (access token valid until 2026-10-31T22:06:59+08:00)",
+    "live re-authorization"
+  ],
+  "notes": [
+    "pendingSignIns being present proves the Host is running the v0.2.0 hardening code.",
+    "The throwaway start attempt was cancelled immediately; no OpenAI authorization page was opened and no credential changed.",
+    "Expiry is the OAuth access-token expiry, not the ChatGPT plan expiry."
+  ]
+}

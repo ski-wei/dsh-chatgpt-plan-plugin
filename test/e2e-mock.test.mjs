@@ -126,6 +126,10 @@ async function startReauth(h, accountId) {
   return { started, url, state: url.searchParams.get('state') }
 }
 
+async function startReconnect(h, accountId) {
+  return startReauth(h, accountId)
+}
+
 test('new registration stores an issued client grant and lists the account model', async () => {
   const h = harness()
   const { url, state } = await startNew(h)
@@ -167,6 +171,66 @@ test('re-authorization reuses the issued client id, omits the registration hint,
   assert.equal(after.accessToken, 'access-2')
   assert.equal(after.generation, 2)
   assert.equal((await h.accounts.status()).accounts.length, 1)
+})
+
+test('reconnect after sign-out reuses the issued client id instead of registering again', async () => {
+  const h = harness()
+  const first = await startNew(h)
+  await h.coordinator.completeCallback({ state: first.state, code: 'code-1', client_id: 'issued-client-1' })
+  const accountId = (await h.accounts.status()).activeAccountId
+  await h.accounts.signOut(accountId)
+  const signedOut = await h.accounts.status()
+  assert.equal(signedOut.signedIn, false)
+  assert.equal(signedOut.reconnectable.length, 1)
+  assert.equal(signedOut.reconnectable[0].email, 'a@example.com')
+
+  h.scenario.access = 'access-2'
+  h.scenario.refresh = 'refresh-2'
+  const again = await startReconnect(h, accountId)
+  assert.equal(again.url.searchParams.get('client_id'), 'issued-client-1')
+  assert.equal(again.url.searchParams.get('agent_name_hint'), null)
+  assert.equal(again.url.searchParams.get('ext_agent_host_id'), null)
+  assert.equal(again.url.searchParams.get('id_token_hint'), null)
+  assert.equal(again.url.searchParams.get('login_hint'), 'a@example.com')
+  const completed = await h.coordinator.completeCallback({ state: again.state, code: 'code-2', client_id: 'issued-client-1' })
+  assert.equal(completed.ok, true, JSON.stringify(completed))
+  const status = await h.accounts.status()
+  assert.equal(status.signedIn, true)
+  assert.equal(status.activeAccountId, accountId)
+  assert.equal(status.reconnectable.length, 0)
+  const record = await h.accounts.readAccountById(accountId)
+  assert.equal(record.clientId, 'issued-client-1')
+  assert.equal(record.accessToken, 'access-2')
+  assert.equal(record.refreshToken, 'refresh-2')
+})
+
+test('reconnect refuses a callback that names a different client registration', async () => {
+  const h = harness()
+  const first = await startNew(h)
+  await h.coordinator.completeCallback({ state: first.state, code: 'code-1', client_id: 'issued-client-1' })
+  const accountId = (await h.accounts.status()).activeAccountId
+  await h.accounts.signOut(accountId)
+  const again = await startReconnect(h, accountId)
+  const completed = await h.coordinator.completeCallback({ state: again.state, code: 'code-2', client_id: 'other-client' })
+  assert.equal(completed.ok, false)
+  assert.equal(completed.code, 'CALLBACK_CLIENT')
+  assert.equal((await h.accounts.status()).signedIn, false)
+  assert.equal((await h.accounts.status()).reconnectable.length, 1)
+})
+
+test('reconnect refuses an ID token for a different subject', async () => {
+  const h = harness()
+  const first = await startNew(h)
+  await h.coordinator.completeCallback({ state: first.state, code: 'code-1', client_id: 'issued-client-1' })
+  const accountId = (await h.accounts.status()).activeAccountId
+  await h.accounts.signOut(accountId)
+  const again = await startReconnect(h, accountId)
+  h.scenario.subject = 'other-subject'
+  const completed = await h.coordinator.completeCallback({ state: again.state, code: 'code-2', client_id: 'issued-client-1' })
+  assert.equal(completed.ok, false)
+  assert.equal(completed.code, 'ID_TOKEN_SUBJECT_MISMATCH')
+  assert.equal((await h.accounts.status()).signedIn, false)
+  assert.equal((await h.accounts.status()).reconnectable.length, 1)
 })
 
 test('a duplicate new login for the same issued relation does not overwrite or duplicate the account', async () => {
@@ -289,6 +353,21 @@ test('an explicit cancel settles the attempt and rejects a late callback', async
   const late = await h.coordinator.completeCallback({ state, code: 'code-late', client_id: 'issued-client-1' })
   assert.equal(late.status, 400)
   assert.equal((await h.accounts.status()).signedIn, false)
+})
+
+test('a fifth pending sign-in is refused, and expired attempts free their slots', async () => {
+  const h = harness()
+  for (let index = 0; index < 4; index += 1) await startNew(h)
+  assert.equal(h.coordinator.pendingCount(), 4)
+  await assert.rejects(
+    () => h.coordinator.start({ newAccount: true }, { origin: 'http://127.0.0.1:3080' }),
+    (error) => error.code === 'TOO_MANY_PENDING',
+  )
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  assert.equal(h.coordinator.pendingCount(), 0)
+  const again = await startNew(h)
+  assert.equal(again.url.searchParams.get('client_id'), 'dynamic_agent_client')
+  await h.coordinator.cancelAll('cancelled')
 })
 
 test('unknown callback state and a denied callback settle without committing', async () => {

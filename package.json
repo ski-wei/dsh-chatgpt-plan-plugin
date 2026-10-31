@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-chatgpt-plan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Native DSH model provider for eligible ChatGPT plan accounts",
@@ -38,8 +38,8 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-credentials": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.2 <0.2.2",
+    "@deepseek-ai/dsh-credentials": ">=0.2.1-rc.2 <0.2.2"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

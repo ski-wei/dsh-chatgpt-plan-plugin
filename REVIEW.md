@@ -1,6 +1,8 @@
 # REVIEW — dsh-chatgpt-plan-plugin
 
 > 2026-10-30：本插件已通过 `plugin_manager` 安装到 `web` profile 并完成一轮真实验收；安装、登录、实测异常与未通过项见 [ACCEPTANCE.md](./ACCEPTANCE.md)。下文“未安装/未登录/NOT_RUN”描述的是实现阶段的历史状态。
+>
+> 2026-10-31：v0.2.0 在 DSH `0.2.1-rc.5` 上重新安装并加载成功；新增“退出后重新连接复用 issued client ID”，离线测试 74/74 通过。真实登录/推理/刷新在该机器上仍未复测，见 [ACCEPTANCE.md §14](./ACCEPTANCE.md)。
 
 ## 1. 范围与结论
 
@@ -59,9 +61,18 @@ TASK 建议一个 `openai-chatgpt-plan/accounts` record 存所有账号。实现
 - 退出期间的旧刷新无法复活账号；账号切换只改 state 索引，不碰 token。
 - 新登录在验证/ID token 校验通过前只准备 pending 索引，不改变 active 账号；失败删除 pending。
 
+### 3.5 退出后重连（v0.2.0）
+
+v0.1.0 在 sign-out 时删除整条 account grant，重新“添加账号”必然走新的动态注册，违反“复用 issued client ID”。v0.2.0 在 state 的 tombstone 中保留 `clientId`/`subject`/`issuer`/`email`/`label`（**绝不含 token**），status 只暴露 `id/label/email/signedOutAt`，coordinator 增加 `reconnect` intent：
+
+- authorize URL 用保存的 `clientId` + `login_hint`，不带 `agent_name_hint`、不带 `id_token_hint`（退出后没有可用的 ID token）；
+- callback client id 与 ID token `sub` 必须与 tombstone 匹配；account id 仍由同一 `(issuer, subject, clientId)` 计算，因此登录后还是同一账号；
+- reconnect 使用确定性 record id，第二次并发尝试会被 flow 注册拒绝；
+- 旧版纯时间戳 tombstone 仍用于阻止陈旧 record 复现，但不会出现在 `reconnectable`。
+
 ## 4. 安全审查
 
-- 状态 JSON 只包含 `id/label/email/planEnabled/reauthRequired/expiresAt`，以及计数字段；不含 access/refresh/id token、clientId、subject、授权 URL、state、code。
+- 状态 JSON 只包含 `accounts` 的 `id/label/email/planEnabled/reauthRequired/expiresAt`、`reconnectable` 的 `id/label/email/signedOutAt`，以及计数字段；不含 access/refresh/id token、clientId、subject、授权 URL、state、code。
 - 回调 HTML 只显示固定文案/错误码，不反射 query。
 - 日志只记录阶段、错误码、状态码；不记录 Authorization、code、token、clientId、subject、完整 authorize URL。
 - 所有 POST 校验精确 `Origin` 和 JSON content type；回调只接受 pending state；state 一次性消费；最多 4 个 pending；start 限流。
@@ -81,10 +92,11 @@ TASK 建议一个 `openai-chatgpt-plan/accounts` record 存所有账号。实现
 6. `auth.openai.com` discovery/JWKS 端点、动态注册参数和 scopes 均按 2026-10-29 官方文档实现；官方变更后需重新核对。
 7. 插件 dispose 会取消 flow/attempts、释放 adapter registration 和 routes；真实进程卸载/重载未验收。
 8. 本会话 `web_fetch` 官方文档时环境把 `developers.openai.com` 解析到非公网地址，无法重新抓取；OAuth/Responses 契约以 2026-10-29 的 DISCOVERY.md 和本机 pi-ai 1.4.0 源码交叉核对。live 前必须在可联网环境重抓官方文档。
+9. 本机首次真实文本请求（`gpt-6.1-sol`）连续 `TRANSPORT`；同机复现为到 `api.openai.com` 的间歇 TLS `unexpected eof` / `ECONNRESET`，另一台机器正常。已给 `TRANSPORT` 加安全 cause code，并把重试改为 5 次/1 s 起；需重启 Host 生效。
 
 ## 6. 离线测试结果
 
-本次运行：**69 tests / 69 pass / 0 fail / 0 skipped**（`node --test test/*.test.mjs`，约 1.1 s）。打包检查：**24 个 packed 文件，178598 bytes，必需运行文件齐全，未包含 node_modules / 临时目录**。
+本次运行（DSH `0.2.1-rc.5` peer）：**83 tests / 83 pass / 0 fail / 0 skipped**（`node --test test/*.test.mjs`，约 0.9 s）。打包检查：**24 个 packed 文件，必需运行文件齐全，未包含 node_modules / 临时目录**。
 
 运行：
 
@@ -99,6 +111,7 @@ npm run check
 - 回调 missing client id、client id mismatch、state unknown/replay、access_denied；
 - ID token 有效/签名/issuer/audience/exp/nonce/sub/sid/alg；
 - 注册复用 issued client id；
+- 退出后 reconnect 复用 issued client id、client id/sub 不匹配拒绝、旧时间戳 tombstone 不可重连；
 - 多账号隔离、切换、退出；
 - 刷新 10 并发 1 次网络；两个 store 共享文件 1 次网络；
 - invalid_grant/retryable/invalid_client 分类；
@@ -117,8 +130,8 @@ npm run check
 
 ## 8. 结论
 
-代码路径与 DSH 公开扩展点对齐；离线行为可复核。真实登录、真实推理、真实刷新/撤销、安装和界面验收仍为 `NOT_RUN`；计划路线能力（尤其 `additional_tools` / reasoning）需 live 验证，未验证前不宣称 live 成功。
+代码路径与 DSH 公开扩展点对齐；离线行为可复核。v0.2.0 在 DSH `0.2.1-rc.5` 上完成安装并 live 加载，退出后 reconnect 复用注册已离线验证。本机真实登录、文本、单工具调用、多轮上下文、多工具序列、退出→Reconnect 与 live Sign in again 已通过；真实 token 刷新与界面失败展示仍为 `NOT_RUN`；空 reasoning 块已修复并离线 + live 验证；`additional_tools` 已在 live 工具调用中工作，但仍需真实 token 刷新复测。
 
 ## 9. 安装验收
 
-见 [ACCEPTANCE.md](./ACCEPTANCE.md)。验收结论为 **FAIL/未整体通过**：退出后重新登录未复用 issued client ID、live 重新授权超时、真实 token 刷新 NOT_RUN，且当前会话日志含一次 browser-session secret 泄漏。
+见 [ACCEPTANCE.md](./ACCEPTANCE.md)。2026-10-30 的 live 验收结论为 **FAIL/未整体通过**：live 重新授权超时、真实 token 刷新 NOT_RUN，且当前会话日志含一次 browser-session secret 泄漏。2026-10-31 在 DSH `0.2.1-rc.5` 上复装为 **applied**，并修复“退出后重新登录未复用 issued client ID”；该项在本机仅离线验证，真实环境复测仍 **NOT_RUN**。

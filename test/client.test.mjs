@@ -64,6 +64,13 @@ test('client factory registers locale dictionaries and the Models footer panel',
   })
   factory.apply(ctx)
   assert.deepEqual(localeRegistrations.map((entry) => entry.locale), ['en', 'zh'])
+  const en = localeRegistrations.find((entry) => entry.locale === 'en').dict
+  const zh = localeRegistrations.find((entry) => entry.locale === 'zh').dict
+  assert.deepEqual(Object.keys(en).sort(), Object.keys(zh).sort())
+  for (const key of ['requestErrorTitle', 'requestErrorQuota', 'requestErrorNetwork', 'requestErrorDismiss']) {
+    assert.equal(typeof en[key], 'string')
+    assert.equal(typeof zh[key], 'string')
+  }
   assert.equal(registrations.length, 1)
   assert.equal(registrations[0].options.name, 'settings.models.footer')
   assert.equal(registrations[0].options.id, 'openai-chatgpt-plan-account')

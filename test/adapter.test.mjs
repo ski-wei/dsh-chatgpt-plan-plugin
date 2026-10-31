@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ChatGptPlanAdapter } from '../lib/adapter.js'
 import { collect, fakeLogger, jsonResponse, makeFetch, sseResponse } from './helpers.mjs'
+import { RequestErrorStore } from '../lib/request-errors.js'
 
 const capabilities = { known: true, additionalTools: true, reasoning: true, efforts: [{ id: 'low' }, { id: 'medium' }, { id: 'high' }], contextWindow: 272000, maxTokens: 128000 }
 
-function setup({ fetchImpl, account = { id: 'acct-a', planEnabled: true, reauthRequired: false }, token = 'access-token', config = {} } = {}) {
+function setup({ fetchImpl, account = { id: 'acct-a', planEnabled: true, reauthRequired: false }, token = 'access-token', config = {}, errors } = {}) {
   const accountState = { current: account }
   const accounts = {
     getActiveAccount: async () => accountState.current,
@@ -26,6 +27,7 @@ function setup({ fetchImpl, account = { id: 'acct-a', planEnabled: true, reauthR
     config: { requestTimeoutMs: 2000, streamIdleTimeoutMs: 2000, displayName: 'ChatGPT Plan', ...config },
     fetchImpl,
     logger: fakeLogger(),
+    ...(errors === undefined ? {} : { errors }),
   })
   return { adapter, accounts, catalog, accountState }
 }
@@ -146,12 +148,22 @@ test('quota, auth, and malformed streams become one terminal error finish', asyn
   assert.equal(badChunks.at(-1).reason.failure.code, 'MALFORMED_RESPONSE')
 })
 
-test('a fetch transport failure becomes a retryable TRANSPORT terminal', async () => {
-  const fetch = makeFetch([[/\/responses$/u, async () => { throw new TypeError('network down') }]])
+test('a fetch transport failure becomes a retryable TRANSPORT terminal with its cause code', async () => {
+  const fetch = makeFetch([[/\/responses$/u, async () => {
+    const error = new TypeError('fetch failed')
+    error.cause = { code: 'ECONNRESET' }
+    throw error
+  }]])
   const { adapter } = setup({ fetchImpl: fetch })
   const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
   assert.equal(chunks.filter((chunk) => chunk.type === 'finish').length, 1)
   assert.equal(chunks.at(-1).reason.failure.code, 'TRANSPORT')
+  assert.match(chunks.at(-1).reason.failure.message, /\(ECONNRESET\)/u)
+  const policy = adapter.providerRetryPolicy('openai-chatgpt-plan')
+  assert.equal(policy.maxRetries, 4)
+  assert.equal(policy.initialDelayMs, 1000)
+  assert.equal(policy.maxDelayMs, 15000)
+  assert.equal(policy.retryableCodes.includes('TRANSPORT'), true)
 })
 
 test('a terminal response.failed keeps its official usage-limit code as QUOTA', async () => {
@@ -204,4 +216,120 @@ test('SSE split inside a frame still produces complete ordered blocks', async ()
   assert.deepEqual(chunks.filter((chunk) => chunk.type === 'text-delta').map((chunk) => chunk.text), ['A', 'B'])
   assert.equal(chunks.find((chunk) => chunk.type === 'block-end').block.text, 'AB')
   assert.equal(chunks.at(-1).type, 'finish')
+})
+
+test('an empty reasoning item is dropped instead of emitting an empty block', async () => {
+  const body = sseResponse([
+    { type: 'response.created', response: { id: 'resp-r' } },
+    { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs-1', summary: [] } },
+    { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs-1', summary: [] } },
+    { type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg-1' } },
+    { type: 'response.output_text.delta', output_index: 1, delta: 'OK' },
+    { type: 'response.output_item.done', output_index: 1, item: { type: 'message', id: 'msg-1', content: [{ type: 'output_text', text: 'OK' }] } },
+    { type: 'response.completed', response: { id: 'resp-r', status: 'completed', usage: { input_tokens: 4, output_tokens: 1, total_tokens: 5 } } },
+  ])
+  const fetch = makeFetch([[/\/responses$/u, async () => body]])
+  const { adapter } = setup({ fetchImpl: fetch })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.some((chunk) => chunk.type === 'block-start' && chunk.blockType === 'reasoning'), false)
+  assert.equal(chunks.some((chunk) => chunk.type === 'block-end' && chunk.block.type === 'reasoning'), false)
+  assert.deepEqual(chunks.find((chunk) => chunk.type === 'block-end').block, { type: 'text', text: 'OK' })
+  assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
+})
+
+test('non-empty reasoning still streams a reasoning block', async () => {
+  const body = sseResponse([
+    { type: 'response.created', response: { id: 'resp-r2' } },
+    { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs-2' } },
+    { type: 'response.reasoning_summary_text.delta', output_index: 0, delta: 'Think' },
+    { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs-2', summary: [{ type: 'summary_text', text: 'Think' }] } },
+    { type: 'response.output_item.added', output_index: 1, item: { type: 'message', id: 'msg-2' } },
+    { type: 'response.output_text.delta', output_index: 1, delta: 'OK' },
+    { type: 'response.output_item.done', output_index: 1, item: { type: 'message', id: 'msg-2', content: [{ type: 'output_text', text: 'OK' }] } },
+    { type: 'response.completed', response: { id: 'resp-r2', status: 'completed', usage: { input_tokens: 4, output_tokens: 1, total_tokens: 5, output_tokens_details: { reasoning_tokens: 2 } } } },
+  ])
+  const fetch = makeFetch([[/\/responses$/u, async () => body]])
+  const { adapter } = setup({ fetchImpl: fetch })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.some((chunk) => chunk.type === 'block-start' && chunk.blockType === 'reasoning'), true)
+  assert.deepEqual(chunks.filter((chunk) => chunk.type === 'reasoning-delta').map((chunk) => chunk.text), ['Think'])
+  assert.deepEqual(chunks.find((chunk) => chunk.type === 'block-end' && chunk.block.type === 'reasoning').block, { type: 'reasoning', text: 'Think' })
+})
+
+test('reasoning text present only on the final item still emits one block', async () => {
+  const body = sseResponse([
+    { type: 'response.created', response: { id: 'resp-r3' } },
+    { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs-3' } },
+    { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs-3', summary: [{ type: 'summary_text', text: 'Late' }] } },
+    { type: 'response.completed', response: { id: 'resp-r3', status: 'completed', usage: { input_tokens: 2, output_tokens: 1, total_tokens: 3 } } },
+  ])
+  const fetch = makeFetch([[/\/responses$/u, async () => body]])
+  const { adapter } = setup({ fetchImpl: fetch })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.filter((chunk) => chunk.type === 'block-start').length, 1)
+  assert.deepEqual(chunks.find((chunk) => chunk.type === 'block-end').block, { type: 'reasoning', text: 'Late' })
+  assert.deepEqual(chunks.at(-1).reason, { kind: 'stop' })
+})
+
+test('a response with only an empty reasoning item is EMPTY_RESPONSE', async () => {
+  const body = sseResponse([
+    { type: 'response.created', response: { id: 'resp-r4' } },
+    { type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning', id: 'rs-4' } },
+    { type: 'response.output_item.done', output_index: 0, item: { type: 'reasoning', id: 'rs-4', summary: [] } },
+    { type: 'response.completed', response: { id: 'resp-r4', status: 'completed', usage: { input_tokens: 2, output_tokens: 0, total_tokens: 2 } } },
+  ])
+  const fetch = makeFetch([[/\/responses$/u, async () => body]])
+  const { adapter } = setup({ fetchImpl: fetch })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.filter((chunk) => chunk.type === 'finish').length, 1)
+  assert.equal(chunks.at(-1).reason.kind, 'error')
+  assert.equal(chunks.at(-1).reason.failure.code, 'EMPTY_RESPONSE')
+  assert.equal(chunks.some((chunk) => chunk.type === 'block-start'), false)
+})
+
+test('a rejected credential becomes AUTH_REJECTED with a sign-in hint and is recorded', async () => {
+  const fetch = makeFetch([[/\/responses$/u, async () => jsonResponse({ error: { code: 'authentication_error' } }, { status: 401 })]])
+  const errors = new RequestErrorStore()
+  const { adapter } = setup({ fetchImpl: fetch, errors })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.at(-1).reason.failure.code, 'AUTH_REJECTED')
+  assert.match(chunks.at(-1).reason.failure.message, /Sign in again from Settings/u)
+  assert.equal(adapter.lastRequestError.code, 'AUTH_REJECTED')
+  assert.equal(adapter.lastRequestError.providerCode, 'authentication_error')
+})
+
+test('an ineligible plan is PLAN_INELIGIBLE, not a quota error', async () => {
+  const fetch = makeFetch([[/\/responses$/u, async () => jsonResponse({ error: { code: 'subscription_sharing_user_not_eligible' } }, { status: 403 })]])
+  const errors = new RequestErrorStore()
+  const { adapter } = setup({ fetchImpl: fetch, errors })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.at(-1).reason.failure.code, 'PLAN_INELIGIBLE')
+  assert.match(chunks.at(-1).reason.failure.message, /not eligible/u)
+  assert.equal(adapter.lastRequestError.code, 'PLAN_INELIGIBLE')
+})
+
+test('a rate limit carries the provider retry delay into the user message', async () => {
+  const fetch = makeFetch([[/\/responses$/u, async () => jsonResponse({ error: { code: 'rate_limit_exceeded' } }, { status: 429, headers: { 'retry-after': '3' } })]])
+  const { adapter } = setup({ fetchImpl: fetch })
+  const chunks = await collect(adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(chunks.at(-1).reason.failure.code, 'RATE_LIMIT')
+  assert.match(chunks.at(-1).reason.failure.message, /Retry in 3s/u)
+  assert.equal(chunks.at(-1).reason.failure.providerRetryAfterMs, 3000)
+})
+
+test('a transport failure mentions the proxy and a later success clears the recorded error', async () => {
+  const errors = new RequestErrorStore()
+  const failing = makeFetch([[/\/responses$/u, async () => {
+    const error = new TypeError('fetch failed')
+    error.cause = { code: 'ECONNRESET' }
+    throw error
+  }]])
+  const first = setup({ fetchImpl: failing, errors })
+  await collect(first.adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(first.adapter.lastRequestError.code, 'TRANSPORT')
+  assert.match(first.adapter.lastRequestError.message, /proxy\/VPN/u)
+
+  const succeeding = setup({ fetchImpl: makeFetch([[/\/responses$/u, async () => textStream()]]), errors })
+  await collect(succeeding.adapter.stream({ provider: 'openai-chatgpt-plan', model: 'gpt-5.4', messages: [{ role: 'user', content: [{ type: 'text', text: 'x' }] }] }))
+  assert.equal(succeeding.adapter.lastRequestError, undefined)
 })

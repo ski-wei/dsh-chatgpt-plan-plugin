@@ -1,0 +1,55 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "action": "manual sign-out then reconnect via Models footer",
+  "preSignOut": {
+    "accountId": "acct-39f71f01da6bc3125abdc75b",
+    "grantRecord": "openai-chatgpt-plan/pending-eea07ed36975e57c"
+  },
+  "postReconnect": {
+    "accountId": "acct-39f71f01da6bc3125abdc75b",
+    "grantRecord": "openai-chatgpt-plan/reconnect-17aa42ca0e57e990",
+    "sameAccountId": true,
+    "clientIdHash": "3ead95b1387325c9",
+    "subjectHash": "bc9553a33a123f00",
+    "generation": 1,
+    "planEnabled": true,
+    "reauthRequired": false,
+    "scopes": [
+      "chatgpt.tokens.use.direct",
+      "email",
+      "offline_access",
+      "openid",
+      "profile",
+      "resource.invoke"
+    ],
+    "expiresAt": "2026-10-31T22:30:09+08:00"
+  },
+  "statusAfter": {
+    "signedIn": true,
+    "providerRegistered": true,
+    "modelCount": 8,
+    "pendingSignIns": 0,
+    "loginPending": false,
+    "reconnectable": []
+  },
+  "stateAfter": {
+    "accounts": [
+      "acct-39f71f01da6bc3125abdc75b"
+    ],
+    "tombstones": [],
+    "activeAccountId": "acct-39f71f01da6bc3125abdc75b"
+  },
+  "interpretation": [
+    "A same account id is derived from issuer+subject+issued client id, so the reconnect reused the same issued registration.",
+    "The grant lives under a reconnect-* record id, which only the reconnect intent allocates; a new registration would use pending-*.",
+    "The tombstone was cleared after the successful reconnect."
+  ],
+  "notCaptured": [
+    "remoteRevoked value returned by sign-out (UI-only action; not read from the session log)",
+    "access/refresh/id token values (never read or exported)"
+  ],
+  "noSecrets": true
+}

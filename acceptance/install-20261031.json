@@ -1,0 +1,76 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "environment": {
+    "node": "v24.21.0",
+    "pnpm": "12.9.1",
+    "dsh": "0.2.1-rc.5",
+    "profile": "web",
+    "pluginManager": "install_bundle (local directory, link:)"
+  },
+  "plugin": {
+    "name": "@local/dsh-chatgpt-plan",
+    "version": "0.2.0",
+    "dependencySpec": "link:/home/qwei/dsh-chatgpt-plan-plugin"
+  },
+  "installResult": {
+    "stage": "enable",
+    "changed": true,
+    "application": "applied",
+    "version": "0.2.0",
+    "warnings": [],
+    "packageResultExitCode": 0,
+    "registries": [
+      null
+    ],
+    "peerWarningOnly": "link: target does not resolve peerDependencies from the profile node_modules; the DSH Host supplies them at runtime"
+  },
+  "loadedRow": {
+    "entryId": "include:openai-chatgpt-plan",
+    "moduleName": "@local/dsh-chatgpt-plan",
+    "enabled": true,
+    "fiberPhase": "active",
+    "patchId": "openai-chatgpt-plan"
+  },
+  "clientSlot": {
+    "slot": "settings.models.footer",
+    "registrant": "Gb",
+    "id": "openai-chatgpt-plan-account",
+    "order": 10,
+    "active": true
+  },
+  "statusResponse": {
+    "httpStatus": 200,
+    "signedIn": false,
+    "accounts": [],
+    "reconnectable": [],
+    "providerRegistered": false,
+    "modelCount": 0,
+    "callbackAvailable": true,
+    "loginPending": false
+  },
+  "offline": {
+    "command": "npm test",
+    "tests": 75,
+    "pass": 75,
+    "fail": 0,
+    "peerRuntime": "0.2.1-rc.5",
+    "packCheck": {
+      "ok": true,
+      "fileCount": 24
+    }
+  },
+  "notRun": [
+    "live ChatGPT sign-in on this machine",
+    "model catalog from a real account",
+    "text and tool inference",
+    "real token refresh",
+    "sign-out and remote revocation",
+    "live re-authorization"
+  ],
+  "notes": [
+    "Credential store on this machine was not modified by this install.",
+    "No access token, refresh token, ID token, authorization code, client id, subject, or authorization URL is stored in this file.",
+    "providerRegistered stays false until an account with the plan scope signs in; that is the documented behavior, not an install failure."
+  ]
+}

@@ -9,6 +9,8 @@
   - 但“退出后再次登录复用 issued client ID”实测 **FAIL**；live 重新授权页面报错/超时 **BLOCKED**；真实 token 刷新 **NOT_RUN**；流中断/限额/权限的 UI 展示仅用夹具验证；当前会话日志含一次 browser-session secret 泄漏（见第 10 节）。
   - 因此不能把“已安装”“已登录”“出现文字”“退出 0”当作整体 PASS。
 
+> **2026-10-31（v0.2.0）**：在另一台机器（DSH `0.2.1-rc.5`、profile `web`）重新安装并加载成功；“退出后重新连接复用 issued client ID”已实现并有离线测试（会话 tombstone + reconnect intent），但该机器上的真实登录/推理/刷新/撤销 **未复测**。第 11 节中 live 重授权、真实刷新、UI 失败展示与日志卫生的结论仍然有效。新证据见第 14 节。
+
 ## 1. 安装与版本
 
 | 项 | 结果 |
@@ -165,7 +167,7 @@
 ## 12. 异常与回退
 
 1. **Sign out TypeError**：已修复 JSON-safe payload；若再次出现，检查 `accounts.signOut` 写出的 grant payload 是否含 `undefined`；测试用 `MemoryCredentials` 已收紧拒绝 `undefined`。
-2. **退出后重登不复用注册**：当前为已知设计缺口。修复方向：退出时保留非秘密 registration tombstone（clientId/subject/email，不含 token），status 暴露“可重新连接”的账号，并让 coordinator 支持 `reconnect` intent；不得把 clientId 之外的 token 留在 tombstone。
+2. **退出后重登不复用注册**：v0.1.0 的已知设计缺口；v0.2.0 已修复——退出时保留非秘密 registration tombstone（`clientId`/`subject`/`issuer`/`email`/`label`，不含 token），status 暴露 `reconnectable`，coordinator 支持 `reconnect` intent，Models 面板出现 `Reconnect`；callback client id 与 ID token `sub` 必须与 tombstone 一致。离线测试覆盖；真实环境复测仍 **NOT_RUN**。
 3. **live 重新授权页面超时**：保留原账号；通过 `/chatgpt-plan/cancel` 清理 pending。需复现时记录浏览器可见错误与时间，不记录 URL/state/nonce/token。
 4. **browser-session secret 出现在当前 session log**：不要导出该 session；轮换 browser session；后续 redaction 必须覆盖任意 `secret` 字段。
 5. **回退安装**：`plugin_manager` `remove_bundle` 移除 `@local/dsh-chatgpt-plan`，或禁用 row `openai-chatgpt-plan`；确认 profile dependency/bundle 中该项移除；重启。不要删除 OpenViking、DeepSeek 或 `client-connection` 记录。账号可按面板/路由退出后删除 `openai-chatgpt-plan/*` 记录；保留 tombstone 不影响其他登录。
@@ -178,6 +180,168 @@
 - [credential-before.json](./acceptance/credential-before.json)
 - [credential-after-signout.json](./acceptance/credential-after-signout.json)
 - [credential-after-relogin.json](./acceptance/credential-after-relogin.json)
+- [install-20261031.json](./acceptance/install-20261031.json)
+- [login-20261031.json](./acceptance/login-20261031.json)
+- [transport-failure-20261031.json](./acceptance/transport-failure-20261031.json)
+- [tools-20261031.json](./acceptance/tools-20261031.json)
+- [reconnect-20261031.json](./acceptance/reconnect-20261031.json)
+- [reauth-20261031.json](./acceptance/reauth-20261031.json)
+- [reasoning-empty-20261031.json](./acceptance/reasoning-empty-20261031.json)
 - [revoke-probe.mjs](./acceptance/revoke-probe.mjs)
 - [file-baseline.sha256](./acceptance/file-baseline.sha256)
 - [file-task-dir.txt](./acceptance/file-task-dir.txt)
+
+## 14. 2026-10-31 复装与 v0.2.0 修复（另一台机器）
+
+- 环境：Node `v24.21.0`、pnpm `12.9.1`、DSH `0.2.1-rc.5`、profile `web`。
+- 插件：`@local/dsh-chatgpt-plan` `0.2.0`（`link:/home/qwei/dsh-chatgpt-plan-plugin`）。
+- 兼容门禁：`peerDependencies` 由精确 `0.2.1-rc.2` 改为 `>=0.2.1-rc.2 <0.2.2`，`0.2.1-rc.5` 通过 `evaluatePluginCompatibility`。
+- 安装：`plugin_manager install_bundle`，target 为项目绝对路径。
+  - `stage: enable`、`changed: true`、`application: applied`、`version: 0.2.0`、`warnings: []`
+  - pnpm 退出码 0；警告只说明被 `link:` 的包不会从 profile `node_modules` 解析 peer（DSH Host 运行时提供 peer）。
+- 加载（无需重启）：
+  - profile `package.json` 依赖新增 `"@local/dsh-chatgpt-plan": "link:/home/qwei/dsh-chatgpt-plan-plugin"`，bundle 列表新增 `@local/dsh-chatgpt-plan`；
+  - `plugin_manager list_plugins`：`include:openai-chatgpt-plan`，`moduleName=@local/dsh-chatgpt-plan`，`enabled=true`，`fiberPhase=active`；
+  - Client `Slots.listSubTree('settings.models.footer')`：occupant `openai-chatgpt-plan-account`，order 10，active；
+  - `GET http://127.0.0.1:3080/chatgpt-plan/status` → 200：
+    `{"signedIn":false,"accounts":[],"reconnectable":[],"providerRegistered":false,"modelCount":0,"callbackAvailable":true,"loginPending":false}`
+    `callbackAvailable=true` 表示 `/auth/callback` 注册成功。
+- 离线验证（DSH `0.2.1-rc.5` peer）：`79 tests / 79 pass / 0 fail`；`npm run check` 通过。
+- v0.2.0 新增离线覆盖：
+  - sign-out tombstone 只保留非秘密注册身份，不包含 access/refresh/id token；
+  - `status.reconnectable` 暴露账号但不含 clientId/subject；
+  - 退出后 `Reconnect` 的 authorize URL 复用 issued client id、无 `agent_name_hint`、无 `id_token_hint`、带 `login_hint`；
+  - reconnect callback 拒绝不同 client id、拒绝不同 `sub`；
+  - 旧版纯时间戳 tombstone 不提供 reconnect；
+  - 第 5 个 pending 登录被拒绝，过期 attempt 在容量判断前清理。
+- 2026-10-31 追加（源码已改，Host 需重启才加载）：`status.pendingSignIns`；`start` 前清理过期 attempt；面板在 `loginPending=true` 时显示取消并禁用重复发起；`TOO_MANY_PENDING`/`LOGIN_IN_PROGRESS` 改为可操作文案。当前运行的旧代码下，可用 `POST /chatgpt-plan/cancel`（同源 `Origin` + JSON）立即清空 pending。
+- **安装时未执行**：真实 ChatGPT 登录、推理、工具、真实 token 刷新、退出/撤销、live 重新授权。登录随后在 §15 完成，模型目录由该账号实时返回 8 个；推理/工具/刷新/退出与重连仍未执行。
+- 脱敏证据：[acceptance/install-20261031.json](./acceptance/install-20261031.json)。
+
+## 15. 2026-10-31 本机真实登录（web profile，DSH 0.2.1-rc.5）
+
+- 用户在 Models 页完成 Sign in with ChatGPT；`GET /chatgpt-plan/status` 实测：
+  `signedIn=true`、`planEnabled=true`、`providerRegistered=true`、`modelCount=8`、`pendingSignIns=0`、`loginPending=false`、`reconnectable=[]`、`callbackAvailable=true`。
+- 账号 1 个：`acct-39f71f01da6bc3125abdc75b`；email 在证据文件中脱敏。
+- 凭据：`openai-chatgpt-plan/state` + 每账号独立 grant；grant 字段齐全（含 scopes/expiresAt/generation），**未导出任何 token**。
+- pending 机制实测（新代码已加载）：
+  - `POST /chatgpt-plan/start {"newAccount":true}` → `pendingSignIns=1`、`loginPending=true`（URL 已丢弃，未打开授权页）；
+  - `POST /chatgpt-plan/cancel` → `pendingSignIns=0`、`loginPending=false`，原账号仍 `signedIn=true`。
+- `status` 中出现 `pendingSignIns` 证明 Host 已运行 v0.2.0 的 pending 清理代码。
+- 仍未执行：在 GUI 选 ChatGPT Plan 模型做真实文本/工具调用、退出→Reconnect live 复用、真实 token 刷新（access 到期 2026-10-31T22:06:59+08:00）、live 重新授权。
+- 证据：[acceptance/login-20261031.json](./acceptance/login-20261031.json)。
+
+## 16. 2026-10-31 首次真实文本尝试：TRANSPORT（链路问题，非插件协议错误）
+
+- 会话 `chatgpt测试`（`session-2d0050de-dcee-40a6-892f-9b61ff4aa49d`），模型 `gpt-6.1-sol`，reasoning `medium`，声明工具 40 个；`request/header` seq 16，三次 `assistant/attempt` seq 20/23/26，`turn/end` seq 28。
+- 三次尝试各约 5.0 s 后失败，最终 `TRANSPORT` / “The ChatGPT-plan transport failed”；该版本尚未携带底层 cause。
+- 同机独立复现（不经过插件、使用假 token，只测连接）：
+  - curl 经本地代理 GET `https://api.openai.com/v1/models` 10 次：8 次 401，2 次 `000` + TLS `unexpected eof`（约 3.0 s），另有 2 次 >2 s；
+  - Node `fetch` 同一路径 10 次：9 次 401，1 次 `TypeError: fetch failed`，cause `ECONNRESET`（3021 ms）；
+  - Host 日志同期出现 `api.deepseek.com` 模型列表 5000 ms 超时。
+- 另一台机器同一插件、同一账号当前正常，说明是**当前机器的代理/TLS 链路**问题，不是凭据、scope、请求体或插件协议。
+- 复现命令（不含 token）：
+
+  ```bash
+  for i in $(seq 1 20); do
+    curl -sS -o /dev/null -w "%{http_code} %{time_total}s\n" \
+      -H 'authorization: Bearer invalid' https://api.openai.com/v1/models
+  done
+  ```
+
+- 代码改进（需重启 Host 才加载）：`TRANSPORT` 消息与日志带安全 cause code；重试策略由 3 次/0.5 s 起改为 5 次/1 s 起（1 s/2 s/4 s/8 s，单次上限 15 s）。
+- 结论：真实文本/工具调用仍未 **PASS**；阻断条件是本机到 `api.openai.com` 的间歇 TLS reset。切换/重启代理节点后需重测。
+- 证据：[acceptance/transport-failure-20261031.json](./acceptance/transport-failure-20261031.json)。
+
+## 17. 2026-10-31 工具调用与多轮上下文（本机 GUI，PASS）
+
+会话 `chatgpt测试`（`session-2d0050de-dcee-40a6-892f-9b61ff4aa49d`），provider `openai-chatgpt-plan`，model `gpt-6.1-sol`。
+
+| turn | 内容 | 结果 |
+|---|---|---|
+| 2 | “只回复OK，不要调用任何工具” | assistant `OK`；usage 9887/5/9892；单个 `finish: stop`；**PASS** |
+| 3 | “用 bash 运行 printf tool-ok 并原样回复” | tool-call `call_ua1urnM6NtFOqPX3FZNzVgRE`，args `{"command":"printf tool-ok"}`；tool/result 同一 callId，`isError=false`，内容 `tool-ok`；随后 assistant `tool-ok`，`finish: stop`；usage 11138/20/11158；**PASS** |
+| 4 | “上一条命令输出的字符串是什么？只回答它。” | assistant `tool-ok`；**PASS** |
+| 5 | “先用 bash 运行 pwd，再用 read 读取 README.md 的前 3 行” | 两个独立 callId：`call_qBbqzv9JiVfD4gyoRHlQr0x6`（pwd）与 `call_UeD2qeC2Nt7A7VPVO16qZDvG`（第二个 bash 读取 README）；两次 result 都正确回填，最终答案含 cwd 与 README 前 3 行；**PASS（有偏差）** |
+
+核对项：
+
+- 每个 step 只有一个终态 `finish`，工具轮为 `tool-calls`，最终轮为 `stop`；
+- `tool/result.toolCallId` 与 `tool-call.id` 一致，`isError=false`；
+- 每轮都有 usage；
+- 多轮历史与工具结果在同一会话中延续。
+
+偏差/观察：
+
+- turn 5 中模型把“用 read”改成了第二个 `bash` 循环读取；两个 `call_id` 独立且结果正确，属模型选择，不是序列化错误；
+- turn 5 第二步 assistant message 里有一个**空 reasoning 块**（`text=""`）。不影响答案，但 UI 可能出现空思考块；已在 §20 修复；
+- DSH 会话日志不持久化请求体，因此“工具结果回填”的证据是：live tool result + 正确最终答案 + 离线 serializer 测试。
+
+仍未验证：退出→Reconnect live、真实 token 刷新、live 重新授权、限额/权限 UI。
+证据：[acceptance/tools-20261031.json](./acceptance/tools-20261031.json)。
+
+## 18. 2026-10-31 退出 → Reconnect live（本机，PASS）
+
+用户重启 DSH 后，在 Models 面板手动退出 ChatGPT 账号，再使用 `Reconnect` 重新登录。
+
+- 退出前账号：`acct-39f71f01da6bc3125abdc75b`，grant record `openai-chatgpt-plan/pending-eea07ed36975e57c`。
+- 重连后账号：**同一个** `acct-39f71f01da6bc3125abdc75b`；grant record 变为 `openai-chatgpt-plan/reconnect-17aa42ca0e57e990`。
+- account id 由 `sha256(issuer + subject + issued clientId)` 派生，ID 不变即 issued client id 未变；`reconnect-*` record id 只有 reconnect intent 会分配，新注册会使用 `pending-*`。
+- 重连后：`planEnabled=true`、`reauthRequired=false`、`generation=1`（新 grant）、scopes 含 `chatgpt.tokens.use.direct`、access 到期 2026-10-31T22:30:09+08:00。
+- state：`accounts=[acct-39f71f01da6bc3125abdc75b]`、`tombstones=[]`、`activeAccountId` 指向同一账号；**tombstone 在重连成功后清除**。
+- `/chatgpt-plan/status`：`signedIn=true`、`providerRegistered=true`、`modelCount=8`、`pendingSignIns=0`、`reconnectable=[]`。
+- 未捕获：sign-out 返回的 `remoteRevoked` 值（面板操作，未从日志读取）；未读取或导出任何 token。
+- 结论：**退出 → Reconnect 复用 issued client ID：PASS（live）**。
+- 证据：[acceptance/reconnect-20261031.json](./acceptance/reconnect-20261031.json)。
+
+## 19. 2026-10-31 Sign in again live（本机，PASS）
+
+用户在同一已登录账号上执行 `Sign in again`（不是 Sign out）。
+
+- 授权 URL 形状（解析后立即取消，URL 不落盘）：
+  `method=reauth`、`client_id` 非 `dynamic_agent_client`、无 `agent_name_hint`、无 `ext_agent_host_id`、带 `id_token_hint` 与 `login_hint`、PKCE `S256`、redirect 精确、scope 含 `chatgpt.tokens.use.direct`。
+- 重授权前后对比：
+
+  | 项 | 前 | 后 |
+  |---|---|---|
+  | account id | `acct-39f71f01da6bc3125abdc75b` | 同 |
+  | grant record | `openai-chatgpt-plan/reconnect-17aa42ca0e57e990` | **同**（未新建 `pending-*`） |
+  | clientId hash | `3ead95b1387325c9` | 同 |
+  | generation | 1 | **2** |
+  | addedAt | 2026-10-31T21:30:09+08:00 | **不变** |
+  | lastRefreshAt | 2026-10-31T21:30:09+08:00 | 2026-10-31T21:41:27+08:00 |
+  | expiresAt | 2026-10-31T22:30:09+08:00 | 2026-10-31T22:41:27+08:00 |
+
+- state：单账号、无 tombstone、active 不变；status `signedIn=true`、`providerRegistered=true`、`modelCount=8`、`pendingSignIns=0`、`reconnectable=[]`。
+- 结论：**已登录账号的 live 重新授权 PASS**；issued client ID 复用、ID token 验证通过、同一 grant 原子覆盖。
+- 证据：[acceptance/reauth-20261031.json](./acceptance/reauth-20261031.json)。
+
+## 20. 空 reasoning 块修复（离线 + live PASS）
+
+- 根因：`response.output_item.added` 一到就发送 reasoning 的 `block-start`，即使该 reasoning item 没有任何 summary 文本；`output_item.done` 仍发送 `block-end`，于是产生 `{type:"reasoning", text:""}`。
+- 修复（[lib/adapter.js](./lib/adapter.js)）：
+  - reasoning 的 `block-start` 延迟到出现非空文本；
+  - 空 delta 不创建、不启动 reasoning slot；
+  - `finalize` 先解析 item 的 summary/content，仍为空则丢弃该 slot 并回退 blocks 计数；
+  - 只有空 reasoning 的响应按 `EMPTY_RESPONSE` 处理；
+  - 防御分支：若块已被宣布但文本为空，仍发送 `block-end` 以闭合协议。
+- 离线验证：4 个新用例（空 reasoning + 文本、非空 delta、仅 item 文本、仅空 reasoning）；**79 tests / 79 pass / 0 fail**。
+- live 复测（已重启 Host）：turn 6 “先思考再只回复 OK” → assistant 只有 `text: "OK"`；`reasoningTokens=8`；**text 块 index=1**，说明 index 0 的 reasoning 槽位仍被分配但被抑制。对比修复前：seq 36 纯文本 index=0，seq 73 空 reasoning 产生 index 0 的 `reasoning text=""` + index 1 的 tool-call。**live PASS**。
+- 证据：`test/adapter.test.mjs`、[acceptance/reasoning-empty-20261031.json](./acceptance/reasoning-empty-20261031.json)；无 token/凭据写入。
+
+## 21. 限额/权限/网络错误的 UI 展示（离线 PASS，live 触发 NOT_RUN）
+
+目标：让额度、资格/权限、限流、网络/超时错误在 UI 上语义正确、可操作，而不是只显示泛化的英文或误导性的 “API key is invalid”。
+
+- **聊天错误行（DSH 所有）**：
+  - `subscription_sharing_user_not_eligible` 从 `QUOTA` 改为 `PLAN_INELIGIBLE`，不再被 DSH 显示成“额度已用尽”，也不触发全局额度提示；
+  - 401/403/无效账号/`invalid_client` 从 `AUTH` 改为 `AUTH_REJECTED`。DSH 对 `AUTH` 会强制显示 “API key is invalid” 并丢弃插件消息，对 OAuth 凭据是误导；
+  - `REAUTH_REQUIRED`、`PLAN_DISABLED`、`MISSING_CREDENTIAL`、`RATE_LIMIT`、`SERVER`、`TIMEOUT`、`TRANSPORT`、空响应/流中断均带下一步动作（重新登录路径、检查代理、重试或等待重置）；
+  - `QUOTA` 保留：DSH 会本地化成“额度已用尽”并显示全局额度提示。
+- **Models 面板（插件所有）**：
+  - Host 新增 `RequestErrorStore`（[lib/request-errors.js](./lib/request-errors.js)），在适配器失败时记录白名单字段（code/message/status/providerCode/retryAfterMs/at），成功、重新登录、切换/退出账号时清除；
+  - `/chatgpt-plan/status` 返回脱敏的 `lastRequestError`；
+  - 客户端按 `en`/`zh` 渲染“最近一次请求失败”横幅，分类为额度/资格/凭据/重新登录/缺少 scope/限流/网络/超时/服务端/流中断/不支持，显示 `code · HTTP status · retry Ns`，可手动忽略。
+- **离线验证**：适配器 401→`AUTH_REJECTED`、403 不符合资格→`PLAN_INELIGIBLE`、429 带 `Retry in 3s`、`TRANSPORT` 指引代理、失败记录与成功清除；status 对 `lastRequestError` 做字段白名单；客户端 en/zh 键一致。**83 tests / 83 pass / 0 fail**。
+- **live 触发 NOT_RUN**：需要真实的 429/403 或断网才能看到聊天错误行与面板横幅；未为了测试而破坏当前网络或额度。重启 Host 加载新代码后，遇到真实错误即为 live 验证。
+- 边界：Chat 错误行由 DSH 拥有；插件不能替换其本地化逻辑（除选择语义正确的错误码/消息），因此中文界面里聊天行仍可能显示英文 `message`，面板横幅是插件自己的中英文面。

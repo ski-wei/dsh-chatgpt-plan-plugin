@@ -34,8 +34,9 @@ test('manifest exports, bundle patch, and client section are complete', () => {
   const required = ['index.js', 'client.js', 'lib/', 'cordis.patch.yml', 'locale/*.json', 'icon.svg', 'README.md', 'LICENSE']
   assert.ok(statSync(join(root, 'package-lock.json')).isFile())
   for (const entry of required) assert.ok(pkg.files.includes(entry), `files includes ${entry}`)
-  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-llm'], '0.2.1-rc.2')
-  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-credentials'], '0.2.1-rc.2')
+  assert.equal(pkg.version, '0.2.0')
+  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-llm'], '>=0.2.1-rc.2 <0.2.2')
+  assert.equal(pkg.peerDependencies['@deepseek-ai/dsh-credentials'], '>=0.2.1-rc.2 <0.2.2')
 })
 
 test('bundle patch inserts exactly the unique provider id and no secrets', () => {

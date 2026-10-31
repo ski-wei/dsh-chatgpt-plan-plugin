@@ -26,6 +26,7 @@ const required = [
   'lib/id-token.js',
   'lib/oauth.js',
   'lib/pkce.js',
+  'lib/request-errors.js',
   'lib/serializer.js',
   'lib/sse.js',
   'lib/util.js',

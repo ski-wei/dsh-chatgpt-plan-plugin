@@ -218,7 +218,61 @@ test('a tombstone keeps a stale account record from reappearing in status', asyn
   assert.equal(status.accounts.length, 0)
   const state = await accounts.readState()
   assert.equal(state.accounts[account.id], undefined)
-  assert.equal(typeof state.tombstones[account.id], 'number')
+  assert.equal(typeof state.tombstones[account.id], 'object')
+  assert.equal(state.tombstones[account.id].clientId, 'client-issued-1')
+  assert.equal(state.tombstones[account.id].subject, account.subject)
+})
+
+test('sign-out keeps only the non-secret registration data reconnect needs', async () => {
+  const clock = makeClock()
+  const credentials = new MemoryCredentials()
+  const accounts = makeStore(clock, makeOAuth(clock), credentials)
+  const account = await addAccount(accounts, credentials, {
+    id: 'acct-keep',
+    email: 'keep@example.com',
+    clientId: 'client-keep',
+    subject: 'subject-keep',
+  })
+  await accounts.signOut(account.id)
+
+  const tombstone = await accounts.readTombstone(account.id)
+  assert.equal(tombstone.clientId, 'client-keep')
+  assert.equal(tombstone.subject, 'subject-keep')
+  assert.equal(tombstone.issuer, 'https://auth.test')
+  assert.equal(tombstone.email, 'keep@example.com')
+  assert.equal(tombstone.label, 'keep@example.com')
+  for (const field of ['accessToken', 'refreshToken', 'idToken']) {
+    assert.equal(Object.hasOwn(tombstone, field), false)
+  }
+
+  const status = await accounts.status()
+  assert.equal(status.signedIn, false)
+  assert.equal(status.reconnectable.length, 1)
+  assert.equal(status.reconnectable[0].id, account.id)
+  assert.equal(status.reconnectable[0].email, 'keep@example.com')
+  const serialized = JSON.stringify(status)
+  for (const secret of ['client-keep', 'subject-keep', 'access-0', 'refresh-0', 'id-token']) {
+    assert.equal(serialized.includes(secret), false)
+  }
+})
+
+test('a legacy timestamp-only tombstone is not offered for reconnect', async () => {
+  const clock = makeClock()
+  const credentials = new MemoryCredentials()
+  credentials.seed(stateKey(), {
+    kind: 'grant',
+    payload: {
+      version: 1,
+      accounts: {},
+      tombstones: { 'acct-legacy': clock.now() },
+      epoch: 1,
+      updatedAt: clock.now(),
+    },
+  })
+  const accounts = makeStore(clock, makeOAuth(clock), credentials)
+  assert.equal(await accounts.readTombstone('acct-legacy'), undefined)
+  const status = await accounts.status()
+  assert.deepEqual(status.reconnectable, [])
 })
 
 test('sign-out deletes local state even when remote revocation fails', async () => {

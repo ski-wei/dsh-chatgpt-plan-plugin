@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-31",
+  "timeZone": "Asia/Shanghai",
+  "dsh": "0.2.1-rc.5",
+  "profile": "web",
+  "session": {
+    "title": "chatgpt测试",
+    "id": "session-2d0050de-dcee-40a6-892f-9b61ff4aa49d",
+    "turn": 6,
+    "assistantSeq": 89,
+    "requestHeaderSeq": 88
+  },
+  "prompt": "先思考再只回复 OK",
+  "provider": "openai-chatgpt-plan",
+  "model": "gpt-6.1-sol",
+  "result": {
+    "assistantContent": [
+      {
+        "type": "text",
+        "text": "OK"
+      }
+    ],
+    "usage": {
+      "inputTokens": 14781,
+      "outputTokens": 15,
+      "totalTokens": 14796,
+      "reasoningTokens": 8
+    },
+    "finish": {
+      "kind": "stop"
+    },
+    "blockStarts": [
+      {
+        "index": 1,
+        "blockType": "text"
+      }
+    ],
+    "reasoningBlockEmitted": false
+  },
+  "whyThisProvesTheFix": [
+    "The text block index is 1, so slot index 0 was allocated (a reasoning item arrived) and then suppressed.",
+    "Before the fix, an empty reasoning item produced a reasoning block at index 0 (seq 73).",
+    "A plain text turn before the fix used index 0 (seq 36), so the new index shift is not a generic numbering change.",
+    "reasoningTokens=8 confirms the model reasoned even though no reasoning summary block was emitted."
+  ],
+  "contrast": {
+    "textOnlySeq": 36,
+    "emptyReasoningSeq": 73,
+    "afterFixSeq": 89
+  },
+  "restartEvidence": {
+    "adapterMtime": "2026-10-31T21:46:04+08:00",
+    "logMtime": "2026-10-31T21:47:59+08:00",
+    "startLines": 6,
+    "meaning": "host restarted after the adapter change"
+  },
+  "verdict": "PASS",
+  "noSecrets": true
+}

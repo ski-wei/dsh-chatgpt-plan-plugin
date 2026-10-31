@@ -36,9 +36,12 @@ function harness(origin = 'http://127.0.0.1:3080') {
       signedIn: true,
       activeAccountId: 'acct-a',
       accounts: [{ id: 'acct-a', label: 'a@example.com', email: 'a@example.com', planEnabled: true, reauthRequired: false, expiresAt: 123, accessToken: 'SECRET', refreshToken: 'SECRET', clientId: 'SECRET', subject: 'SECRET' }],
+      reconnectable: [{ id: 'acct-old', label: 'old@example.com', email: 'old@example.com', signedOutAt: 456, clientId: 'SECRET', subject: 'SECRET' }],
       providerRegistered: true,
       modelCount: 1,
-      loginPending: false,
+      pendingSignIns: 2,
+      loginPending: true,
+      lastRequestError: { code: 'TRANSPORT', message: 'Network error reaching the plan.', providerCode: 'ECONNRESET', retryAfterMs: 3000, at: 789, accessToken: 'SECRET', clientId: 'SECRET' },
       lastError: { code: 'AUTH', message: 'Sign in again' },
       callbackAvailable: true,
     }),
@@ -65,8 +68,20 @@ test('status is whitelisted and never exposes token-shaped fields', async () => 
   assert.equal(body.accounts[0].refreshToken, undefined)
   assert.equal(body.accounts[0].clientId, undefined)
   assert.equal(body.accounts[0].subject, undefined)
+  assert.equal(body.reconnectable[0].id, 'acct-old')
+  assert.equal(body.reconnectable[0].email, 'old@example.com')
+  assert.equal(body.reconnectable[0].signedOutAt, 456)
+  assert.equal(body.reconnectable[0].clientId, undefined)
+  assert.equal(body.reconnectable[0].subject, undefined)
   assert.equal(JSON.stringify(body).includes('SECRET'), false)
-  assert.equal(body.loginPending, false)
+  assert.equal(body.pendingSignIns, 2)
+  assert.equal(body.loginPending, true)
+  assert.equal(body.lastRequestError.code, 'TRANSPORT')
+  assert.equal(body.lastRequestError.providerCode, 'ECONNRESET')
+  assert.equal(body.lastRequestError.retryAfterMs, 3000)
+  assert.equal(body.lastRequestError.at, 789)
+  assert.equal(body.lastRequestError.accessToken, undefined)
+  assert.equal(body.lastRequestError.clientId, undefined)
 })
 
 test('start enforces same origin, JSON, and account validation', async () => {
